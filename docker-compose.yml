@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # Servidor Eureka para registro y descubrimiento de servicios
+  eureka-server:
+    build:
+      context: ./eureka-server
+      dockerfile: Dockerfile
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    volumes:
+      - ./eureka-server/src/main/resources/application-docker.yml:/app/application-docker.yml
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8761/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # API Gateway
+  gateway-service:
+    build:
+      context: ./gateway-service
+      dockerfile: Dockerfile
+    container_name: gateway-service
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    volumes:
+      - ./gateway-service/src/main/resources/application-docker.yml:/app/application-docker.yml
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Base de datos para Service A
+  mysql-service-a:
+    image: mysql:8.0
+    container_name: mysql-service-a
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: db_service_a
+      MYSQL_USER: micro_user
+      MYSQL_PASSWORD: micro_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./init-service-a.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql-service-a-data:/var/lib/mysql
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u", "micro_user", "-pmicro_pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Microservicio A (Productos)
+  service-a:
+    build:
+      context: ./service-a
+      dockerfile: Dockerfile
+    container_name: service-a
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    volumes:
+      - ./service-a/src/main/resources/application-docker.yml:/app/application-docker.yml
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      mysql-service-a:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Base de datos para Service B
+  mysql-service-b:
+    image: mysql:8.0
+    container_name: mysql-service-b
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: db_service_b
+      MYSQL_USER: micro_user
+      MYSQL_PASSWORD: micro_pass
+    ports:
+      - "3308:3306"
+    volumes:
+      - ./init-service-b.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql-service-b-data:/var/lib/mysql
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u", "micro_user", "-pmicro_pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Microservicio B (Órdenes)
+  service-b:
+    build:
+      context: ./service-b
+      dockerfile: Dockerfile
+    container_name: service-b
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    volumes:
+      - ./service-b/src/main/resources/application-docker.yml:/app/application-docker.yml
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      mysql-service-b:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  microservices-network:
+    driver: bridge
+
+volumes:
+  mysql-service-a-data:
+  mysql-service-b-data:
