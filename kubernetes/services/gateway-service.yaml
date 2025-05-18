@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-service
+  namespace: microservices
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gateway-service
+  template:
+    metadata:
+      labels:
+        app: gateway-service
+    spec:
+      imagePullSecrets:
+        - name: ocirsecret
+      containers:
+        - name: gateway-service
+          image: sa-bogota-1.ocir.io/axv8ixlpasy5/gateway-service:2025-05-17-202
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "docker"
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-service
+  namespace: microservices
+spec:
+  type: LoadBalancer  # Esto creará un balanceador de carga externo
+  ports:
+    - port: 80
+      targetPort: 8080
+  selector:
+    app: gateway-service
